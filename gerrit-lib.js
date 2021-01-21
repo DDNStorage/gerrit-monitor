@@ -17,6 +17,7 @@ class Gerrit {
     this.parsed = false
     this.fetchDate = false
     this.log = false
+    this.prevTimestamp = false
 
     // Create the log file if it doesn't exist
     if (
@@ -67,6 +68,32 @@ class Gerrit {
     })
   }
 
+  getLatestData() {
+    this.prevTimestamp = this.log.processed[this.log.processed.length - 1]
+    return JSON.parse(
+      fs.readFileSync(
+        config.dataDir +
+          path.sep +
+          'snapshot-' +
+          this.prevTimestamp +
+          config.dataFileExt
+      )
+    )
+  }
+
+  getPreviousData() {
+    this.prevTimestamp = this.log.processed[this.log.processed.length - 2]
+    return JSON.parse(
+      fs.readFileSync(
+        config.dataDir +
+          path.sep +
+          'snapshot-' +
+          this.log.processed[this.log.processed.length - 2] +
+          config.dataFileExt
+      )
+    )
+  }
+
   async fetchAndLog(query = 'is:open') {
     return new Promise(async (resolve, reject) => {
       // First, pull it...
@@ -87,7 +114,7 @@ class Gerrit {
 
       // Now store it...
       // - To variables
-      this.data = JSON.parse(raw)
+      this.data = await JSON.parse(raw)
       this.parsed = true
       this.fetchDate = new Date()
 
@@ -118,21 +145,9 @@ class Gerrit {
          * and one or more prior entries
          */
         if (this.log.processed.length > 1) {
-          const prevTimestamp = this.log.processed[
-            this.log.processed.length - 2
-          ]
-          const prevData = JSON.parse(
-            fs.readFileSync(
-              config.dataDir +
-                path.sep +
-                'snapshot-' +
-                prevTimestamp +
-                config.dataFileExt
-            )
-          )
           // Compare
-          let prevUrgent = await this.getUrgentPatches(prevData)
-          let nowUrgent = await this.getUrgentPatches(this.data)
+          let prevUrgent = await this._getUrgentPatches(this.getPreviousData())
+          let nowUrgent = await this._getUrgentPatches(this.data)
 
           // debug(`...prevUrgent items: `, prevUrgent)
           // debug(`...nowUrgent items: `, nowUrgent)
@@ -160,7 +175,9 @@ class Gerrit {
           )
 
           debug(
-            `prev: timestamp: ${prevTimestamp}; prevList: ${prevList.join(',')}`
+            `prev: timestamp: ${this.prevTimestamp}; prevList: ${prevList.join(
+              ','
+            )}`
           )
           debug(
             `now: timestamp: ${this.fetchDate.getTime()}; nowList: ${nowList.join(
@@ -194,19 +211,53 @@ class Gerrit {
     })
   }
 
-  async getUrgentPatches(data) {
+  async getUrgentPatches() {
+    return new Promise(async (resolve, reject) => {
+      // const data = this.data ? this.data : await this.fetchAndLog()
+      debug(`getUrgentPatches() this.data.length: `, this.data.length)
+      resolve(await this._getUrgentPatches(this.data))
+    })
+  }
+
+  async _getUrgentPatches(data) {
     const urgentPatches = []
-    data.forEach((d) => {
+    data.forEach(async (d) => {
       if (d.hashtags.length > 0 && d.hashtags.includes('urgent')) {
         urgentPatches.push({
           id: d._number,
           subject: d.subject,
           owner: d.owner.name,
           email: d.owner.email,
+          vScore: this.getVScore(d),
         })
       }
     })
     return urgentPatches
+  }
+
+  /**
+   * Calculate the summary Verified score for the supplied patch
+   *
+   * @param {object} patch JSON patch data from Gerrit
+   * @returns {string|number} Value - return "+1" if Max is 1, otherwise Min
+   */
+  getVScore(patch) {
+    let vScore = 0
+    if (patch.labels.Verified && patch.labels.Verified.all) {
+      vScore = patch.labels.Verified.all.map((x) => (x.value ? x.value : 0))
+
+      let vScoresMax = vScore.reduce((max, cur) => Math.max(max, cur))
+      let vScoresMin = vScore.reduce((min, cur) => Math.min(min, cur))
+
+      if (vScoresMax == 1) {
+        vScore = '+1'
+      } else if (vScoresMin == -1) {
+        return -1
+      } else {
+        return 0
+      }
+    }
+    return vScore
   }
 }
 

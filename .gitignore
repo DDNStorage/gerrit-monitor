@@ -1,5 +1,8 @@
+# Data files
+data/
+
 # Config files
-config/default.json
+config/
 
 # Logs
 logs

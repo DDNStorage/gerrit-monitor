@@ -1,8 +1,6 @@
 const config = require('config')
-const debug = require('debug')('gerrit-alert')
+const debug = require('debug')('gerrit-monitor')
 const cron = require('node-cron')
-
-let webhook = false
 
 const slackConfigured =
   config.has('slack') &&
@@ -12,7 +10,7 @@ const slackConfigured =
 
 if (slackConfigured) {
   const { IncomingWebhook } = require('@slack/webhook')
-  webhook = new IncomingWebhook(config.slack.webhookUrl)
+  let webhook = new IncomingWebhook(config.slack.webhookUrl)
 
   const reportEmpty = false
   const DEFAULT_FREQUENCY = 30 // Number of minutes between checks
@@ -49,15 +47,61 @@ if (slackConfigured) {
             text: msg,
           })
         }
+
+        let latestData = await gLib.getLatestData()
+        let prevData = gLib.getPreviousData()
+
+        debug(`latestData.length = ${latestData.length}`)
+        debug(`prevData.length = ${prevData.length}`)
+
+        gLib._getUrgentPatches(latestData).then(async (currentUrgent) => {
+          const prevUrgent = await gLib._getUrgentPatches(prevData)
+
+          const prevUrgentUnverified = []
+
+          // TODO: Change to Map
+          prevUrgent.forEach((d) => {
+            if (d.vScore == -1) {
+              prevUrgentUnverified.push(d.id)
+            }
+          })
+          const newUnverified = []
+          currentUrgent.forEach((d) => {
+            if (d.vScore == -1 && !prevUrgentUnverified.includes(d.id)) {
+              newUnverified.push(d)
+            }
+          })
+          if (newUnverified.length) {
+            formatUrgent(newUnverified)
+          } else {
+            debug(`newUnverified is empty: ${newUnverified}`)
+          }
+        })
       })
     }
   )
 } else {
   console.error(
-    `Slack must be configured
-      i.e.
-      config.slack.enabled 
-      and
-      config.slack.webhookUrl must all be set]`
+    `Slack must be configured and enabled.
+    i.e. 'config.slack.enabled = true'
+    and 'config.slack.webhookUrl' must be set`
   )
+}
+
+function formatUrgent(data, icon = false) {
+  const results = ['\n']
+  data.forEach((d) => {
+    results.push(
+      `${icon ? `:${icon}:` : ''}<${config.gerritUrlBase}/${d.id}|${d.id}>: ${
+        d.subject
+      } (${
+        config.has('slack') &&
+        config.slack.has('users') &&
+        Object.keys(config.slack.users).includes(d.email)
+          ? `<@${config.slack.users[d.email]}>`
+          : `${d.owner} ${d.email}`
+      }; ${d.vScore})`
+    )
+  })
+  return results.join('\n')
 }
