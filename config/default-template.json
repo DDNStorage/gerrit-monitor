@@ -1,0 +1,36 @@
+{
+    "gerritUrlBase": "https://gerrit.hostname.com:8000",
+    "openQuery": "is:open",
+    "gerritUrlPrefix": "/changes/?q=",
+    "gerritUrlSuffix": "&o=DETAILED_LABELS&o=CURRENT_COMMIT&o=ALL_REVISIONS&o=DETAILED_ACCOUNTS&o=REVIEWED",
+    "dataDir": "data",
+    "dataFileName": "Open",
+    "dataFileExt": ".json",
+    "port": 3000,
+    
+    "saveHistory": true,
+    "historyDir": "data-archive",
+    "slack": {
+        "enabled": false,
+        "slackWebhookUrl": "https://hooks.slack.com/ENTER_PARAMETERS_HERE",
+        "users": {
+            "USER_EMAIL": "SLACK_USER_ID"
+        }
+    },
+    "cron": {
+        "frequency": 30
+    },
+    "spotlight": {
+        "enabled": true,
+        "flags": {
+            "hashtag": "urgent"
+        },
+        "patches": {},
+        "notifications": {
+            "slack": {
+                "enabled": false,
+                "webhookUrl": "TBD"
+            }
+        }
+    }
+}

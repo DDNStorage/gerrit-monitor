@@ -1,0 +1,19 @@
+{
+  "name": "gerrit-monitor",
+  "version": "0.0.1",
+  "description": "Monitor Gerrit for urgent patches & (optionally) send Slack message on changes",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "John D. Lewis <31732476+jolewis-ddn@users.noreply.github.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/webhook": "^6.0.0",
+    "config": "^3.3.3",
+    "debug": "^4.3.1",
+    "node-cron": "^2.0.3",
+    "node-fetch": "^2.6.1"
+  }
+}
