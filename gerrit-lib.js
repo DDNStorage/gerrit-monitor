@@ -10,6 +10,7 @@ const NON_WIP_RECORDS = 200
 const WIP_RECORDS = 300
 
 const LOG_FILENAME = 'snapshot-log'
+const EMPTY_LOG_TEMPLATE = { latest: false, previous: false }
 
 class Gerrit {
   constructor() {
@@ -17,6 +18,7 @@ class Gerrit {
     this.parsed = false
     this.fetchDate = false
     this.log = false
+    this.latestTimestamp = false
     this.prevTimestamp = false
 
     // Create the log file if it doesn't exist
@@ -26,75 +28,82 @@ class Gerrit {
       )
     ) {
       // debug(`Log file doesn't exist... Creating it.`)
-      const now = Date.now()
+      this.previous = false
       fs.writeFileSync(
         config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt,
-        JSON.stringify({ latest: false, processed: [] })
+        JSON.stringify(EMPTY_LOG_TEMPLATE)
       )
-      this.previous = false
+      debug(`Log file didn't exist, so created it [EMPTY_LOG_TEMPLATE].`)
     }
   }
 
   readLogFile() {
-    return new Promise((resolve, reject) => {
+    debug(`readLogFile() called`)
+    let filename = config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt
+    if (fs.existsSync(filename)) {
       // debug(`readLogFile() called`)
-      fs.readFile(
-        config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt,
-        (err, data) => {
-          if (err) {
-            console.error(`RLF ERROR: `, err)
-            reject(err)
-          } else {
-            this.log = JSON.parse(data)
-            resolve(this.log.processed.length)
-          }
-        }
-      )
-    })
+      this.log = fs.readFileSync(filename)
+      return this.log
+    } else {
+      // Log file doesn't exist, so return empty array
+      debug(`...file doesn't exist, so returning EMPTY_LOG_TEMPLATE`)
+      return EMPTY_LOG_TEMPLATE
+    }
   }
 
   updateLogFile(newLatest) {
-    return new Promise((resolve, reject) => {
-      this.readLogFile().then(() => {
-        // Save latest
-        this.log.latest = newLatest
-        this.log.processed.push(newLatest)
-        fs.writeFileSync(
-          config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt,
-          JSON.stringify(this.log)
+    debug(`updateLogFile(${newLatest}) called`)
+    // this.readLogFile()
+    // Save latest
+    if (!this.log) {
+      this.log = EMPTY_LOG_TEMPLATE
+    }
+    debug(`... setting this.log.previous to ${this.log.latest}`)
+    this.log.previous = this.log.latest
+    this.log.latest = newLatest
+    fs.writeFileSync(
+      config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt,
+      JSON.stringify(this.log)
+    )
+    return this.log.latest
+  }
+
+  getLatestData(status = 'open') {
+    this.latestTimestamp = this.log.latest
+    return JSON.parse(
+      fs.readFileSync(
+        config.dataDir +
+          path.sep +
+          'snapshot-' +
+          status +
+          '-' +
+          this.latestTimestamp +
+          config.dataFileExt
+      )
+    )
+  }
+
+  getPreviousData(status = 'open') {
+    debug(`getPreviousData(${status}) called...\n\tthis.log.previous = ${this.log.previous}`)
+    this.prevTimestamp = this.log.previous
+    if (this.log.previous) {
+      return JSON.parse(
+        fs.readFileSync(
+          config.dataDir +
+            path.sep +
+            'snapshot-' +
+            status +
+            '-' +
+            this.log.previous +
+            config.dataFileExt
         )
-        resolve(this.log.processed.length)
-      })
-    })
-  }
-
-  getLatestData() {
-    this.prevTimestamp = this.log.processed[this.log.processed.length - 1]
-    return JSON.parse(
-      fs.readFileSync(
-        config.dataDir +
-          path.sep +
-          'snapshot-' +
-          this.prevTimestamp +
-          config.dataFileExt
       )
-    )
+    } else {
+      return {}
+    }
   }
 
-  getPreviousData() {
-    this.prevTimestamp = this.log.processed[this.log.processed.length - 2]
-    return JSON.parse(
-      fs.readFileSync(
-        config.dataDir +
-          path.sep +
-          'snapshot-' +
-          this.log.processed[this.log.processed.length - 2] +
-          config.dataFileExt
-      )
-    )
-  }
-
-  async fetchAndLog(query = 'is:open') {
+  async fetchAndLog(query = 'open') {
     return new Promise(async (resolve, reject) => {
       // First, pull it...
       const response = await fetch(
@@ -114,23 +123,31 @@ class Gerrit {
 
       // Now store it...
       // - To variables
+      let now = Date.now()
       this.data = await JSON.parse(raw)
       this.parsed = true
-      this.fetchDate = new Date()
+      this.fetchDate = now
+      this.latestTimestamp = now
 
-      const now = Date.now()
       if (!fs.existsSync(config.dataDir)) {
         fs.mkdirSync(config.dataDir)
       }
       // - To cache file
+      debug(`f&l: writing to data file: `, this.log)
       fs.writeFileSync(
-        config.dataDir + path.sep + 'snapshot-' + now + config.dataFileExt,
-        JSON.stringify(this.data)
+        config.dataDir +
+          path.sep +
+          'snapshot-' +
+          query +
+          '-' +
+          now +
+          config.dataFileExt,
+        JSON.stringify(this.log)
       )
       // Update the log
-      this.updateLogFile(now).then((result) => {
-        resolve(this.data.length > 0)
-      })
+      let result = this.updateLogFile(now)
+      debug(`f&l: after updateLogFile(${now})`)
+      resolve(this.data.length > 0)
     })
   }
 
@@ -144,10 +161,12 @@ class Gerrit {
          * the current entry (i.e. this.log.processed.length-1)
          * and one or more prior entries
          */
-        if (this.log.processed.length > 1) {
+        if (this.log.previous) {
           // Compare
-          let prevUrgent = await this._getUrgentPatches(this.getPreviousData())
-          let nowUrgent = await this._getUrgentPatches(this.data)
+          debug(`...about to call _getUrgentPatches(this.getPreviousData())`)
+          let prevUrgent = this._getUrgentPatches(this.getPreviousData())
+          debug(`...about to call _getUrgentPatches(this.data)`)
+          let nowUrgent = this._getUrgentPatches(this.data)
 
           // debug(`...prevUrgent items: `, prevUrgent)
           // debug(`...nowUrgent items: `, nowUrgent)
@@ -212,26 +231,29 @@ class Gerrit {
   }
 
   async getUrgentPatches() {
-    return new Promise(async (resolve, reject) => {
+    // return new Promise(async (resolve, reject) => {
       // const data = this.data ? this.data : await this.fetchAndLog()
       debug(`getUrgentPatches() this.data.length: `, this.data.length)
-      resolve(await this._getUrgentPatches(this.data))
-    })
+      return(this._getUrgentPatches(this.data))
+    // })
   }
 
-  async _getUrgentPatches(data) {
+  _getUrgentPatches(data) {
+    debug(`_getUrgentPatches() called: ${data ? data.length : 'undef'}`)
     const urgentPatches = []
-    data.forEach(async (d) => {
-      if (d.hashtags.length > 0 && d.hashtags.includes('urgent')) {
-        urgentPatches.push({
-          id: d._number,
-          subject: d.subject,
-          owner: d.owner.name,
-          email: d.owner.email,
-          vScore: this.getVScore(d),
-        })
-      }
-    })
+    if (data) {
+      data.forEach((d) => {
+        if (d.hashtags.length > 0 && d.hashtags.includes('urgent')) {
+          urgentPatches.push({
+            id: d._number,
+            subject: d.subject,
+            owner: d.owner.name,
+            email: d.owner.email,
+            vScore: this.getVScore(d),
+          })
+        }
+      })
+    }
     return urgentPatches
   }
 
