@@ -12,7 +12,11 @@ if (slackConfigured) {
   const { IncomingWebhook } = require('@slack/webhook')
   let webhook = new IncomingWebhook(config.slack.webhookUrl)
 
-  const reportEmpty = false
+  const reportEmpty =
+    config.has('cron') && config.cron.has('reportEmpty')
+      ? config.cron.reportEmpty
+      : false
+
   const DEFAULT_FREQUENCY = 30 // Number of minutes between checks
 
   const Gerrit = require('./gerrit-lib')
@@ -28,18 +32,22 @@ if (slackConfigured) {
   debug(`freq: ${freq}`)
 
   cron.schedule(`*/${freq} * * * *`, () => {
-    gLib.delta().then(async (result) => {
+    gLib.fetchAndLog().then(async (x) => {
+      debug(`done with ${x}!`)
+      let result = gLib.delta()
+
+      // gLib.delta().then(async (result) => {
       let d = new Date().toLocaleString('en', { timeZoneName: 'short' })
       debug(`${d} delta result: `, result)
       if (result.count || reportEmpty) {
         let msg = `*Urgent Patch Delta Report* @ ${d}: ${
           reportEmpty ? `\nReporting Empty: yes` : ''
         }${
-          result.add.length || reportEmpty
+          (result && result.add && result.add.length) || reportEmpty
             ? `\n:fire: Added: ${result.add.join(',')}`
             : ''
         } ${
-          result.drop.length || reportEmpty
+          (result && result.drop && result.drop.length) || reportEmpty
             ? `\n:checkered_flag: Dropped: ${result.drop.join(',')}`
             : ''
         }`
@@ -49,34 +57,35 @@ if (slackConfigured) {
         })
       }
 
-      let latestData = gLib.getLatestData()
-      let prevData = gLib.getPreviousData()
+      //   let latestData = gLib.getLatestData()
+      //   let prevData = gLib.getPreviousData()
 
-      debug(`latestData.length = ${latestData.length}`)
-      debug(`prevData.length = ${prevData.length}`)
+      //   debug(`latestData.length = ${latestData.length}`)
+      //   debug(`prevData.length = ${prevData.length}`)
 
-      let currentUrgent = gLib._getUrgentPatches(latestData)
-      let prevUrgent = gLib._getUrgentPatches(prevData)
+      //   let currentUrgent = gLib._getUrgentPatches(latestData)
+      //   let prevUrgent = gLib._getUrgentPatches(prevData)
 
-      const prevUrgentUnverified = []
+      //   const prevUrgentUnverified = []
 
-      // TODO: Change to Map
-      prevUrgent.forEach((d) => {
-        if (d.vScore == -1) {
-          prevUrgentUnverified.push(d.id)
-        }
-      })
-      const newUnverified = []
-      currentUrgent.forEach((d) => {
-        if (d.vScore == -1 && !prevUrgentUnverified.includes(d.id)) {
-          newUnverified.push(d)
-        }
-      })
-      if (newUnverified.length) {
-        formatUrgent(newUnverified)
-      } else {
-        debug(`newUnverified is empty: ${newUnverified}`)
-      }
+      //   // TODO: Change to Map
+      //   prevUrgent.forEach((d) => {
+      //     if (d.vScore == -1) {
+      //       prevUrgentUnverified.push(d.id)
+      //     }
+      //   })
+      //   const newUnverified = []
+      //   currentUrgent.forEach((d) => {
+      //     if (d.vScore == -1 && !prevUrgentUnverified.includes(d.id)) {
+      //       newUnverified.push(d)
+      //     }
+      //   })
+      //   if (newUnverified.length) {
+      //     formatUrgent(newUnverified)
+      //   } else {
+      //     debug(`newUnverified is empty: ${newUnverified}`)
+      //   }
+      // })
     })
   })
 } else {
