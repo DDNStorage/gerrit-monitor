@@ -119,7 +119,8 @@ class Gerrit {
       fs.readFileSync(
         config.dataDir +
           path.sep +
-          LOG_FILENAME + '-' +
+          LOG_FILENAME +
+          '-' +
           status +
           '-' +
           this.latestTimestamp +
@@ -134,7 +135,8 @@ class Gerrit {
       fs.readFileSync(
         config.dataDir +
           path.sep +
-          LOG_FILENAME + '-merged-' +
+          LOG_FILENAME +
+          '-merged-' +
           timestamp +
           config.dataFileExt
       )
@@ -152,7 +154,8 @@ class Gerrit {
         fs.readFileSync(
           config.dataDir +
             path.sep +
-            LOG_FILENAME + '-' +
+            LOG_FILENAME +
+            '-' +
             status +
             '-' +
             this.log.previous +
@@ -174,7 +177,11 @@ class Gerrit {
             config.gerritUrlPrefix +
             status +
             config.gerritUrlSuffix +
-            (config.monitor && config.monitor.gerritRecordCount && typeof config.monitor.gerritRecordCount == 'number' ? `&n=${config.monitor.gerritRecordCount}` : `&n=${GERRIT_RECORD_COUNT_DEFAULT}`)
+            (config.monitor &&
+            config.monitor.gerritRecordCount &&
+            typeof config.monitor.gerritRecordCount == 'number'
+              ? `&n=${config.monitor.gerritRecordCount}`
+              : `&n=${GERRIT_RECORD_COUNT_DEFAULT}`)
         )
         let raw = await response.text()
 
@@ -201,7 +208,8 @@ class Gerrit {
         fs.writeFileSync(
           config.dataDir +
             path.sep +
-            LOG_FILENAME + '-' +
+            LOG_FILENAME +
+            '-' +
             status +
             '-' +
             this.now +

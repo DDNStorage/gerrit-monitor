@@ -57,40 +57,50 @@ if (slackConfigured) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `*Urgent Patch Delta Report* @ ${d}`
-          }
+            text: `*Urgent Patch Delta Report* @ ${d}`,
+          },
         }
-        let addBlock = result.add && result.add.length ?
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*Added*\n${`:fire:` + result.add.join('\n:fire:')}\n`
-          }
-        }
-        : false
+        let addBlock =
+          result.add && result.add.length
+            ? {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*Added*\n${`:fire:` + result.add.join('\n:fire:')}\n`,
+                },
+              }
+            : false
 
-        let dropBlock = result.drop && result.drop.length ?
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*Dropped*\n${`:checkered_flag:` + result.drop.join('\n:checkered_flag:')}\n`
-          }
-        }
-        : false
+        let dropBlock =
+          result.drop && result.drop.length
+            ? {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*Dropped*\n${
+                    `:checkered_flag:` + result.drop.join('\n:checkered_flag:')
+                  }\n`,
+                },
+              }
+            : false
 
         if (addBlock || dropBlock || reportEmpty) {
-          blocks = [ headerBlock ]
+          blocks = [headerBlock]
           if (addBlock || dropBlock) {
-            if(addBlock) blocks.push(addBlock)
-            if(dropBlock) blocks.push(dropBlock)
+            if (addBlock) blocks.push(addBlock)
+            if (dropBlock) blocks.push(dropBlock)
           } else {
-            blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `Nothing added or dropped\n(Sending empty notification per reportEmpty config value)` }})
+            blocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `Nothing added or dropped\n(Sending empty notification per reportEmpty config value)`,
+              },
+            })
           }
 
           await webhook.send({
-            blocks: blocks
+            blocks: blocks,
           })
         } else {
           debug(`No items added or dropped, so not sending Slack msg`)
