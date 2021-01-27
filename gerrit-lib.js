@@ -280,51 +280,79 @@ class Gerrit {
       // debug(`...prevUrgent items: `, prevUrgent)
       // debug(`...nowUrgent items: `, nowUrgent)
 
-      const deltaList = { count: 0, add: [], drop: [] }
-      let prevList = prevUrgent.map(
-        (x) =>
-          `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
+      const deltaList = { count: 0, add: [], drop: [], merge: [] }
+
+      let prevListIds = prevUrgent.map((x) => x.id)
+      let nowListIds = nowUrgent.map((x) => x.id)
+
+      debug(`prevListIds: `, prevListIds, `; nowListIds: `, nowListIds)
+
+      let prevListMsgs = []
+      let msg = ""
+
+      prevUrgent.forEach(
+        (x) => {
+          msg = `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
+            config.has('slack') &&
+            config.slack.has('users') &&
+            Object.keys(config.slack.users).includes(x.email)
+              ? `<@${config.slack.users[x.email]}>`
+              : `${x.owner} ${x.email}`
+            })`
+          if (!nowListIds.includes(x.id)) {
+            // Merged?
+            if (this.log.latest.merged.includes(x.id)) {
+              deltaList.merge.push(msg)
+            } else { // Otherwise, add to drop list
+              deltaList.drop.push(msg)
+            }
+          }
+        }
+      )
+
+      nowUrgent.forEach(
+        (x) => {
+          msg = `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
             config.has('slack') &&
             config.slack.has('users') &&
             Object.keys(config.slack.users).includes(x.email)
               ? `<@${config.slack.users[x.email]}>`
               : `${x.owner} ${x.email}`
           })`
-      )
-      let nowList = nowUrgent.map(
-        (x) =>
-          `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
-            config.has('slack') &&
-            config.slack.has('users') &&
-            Object.keys(config.slack.users).includes(x.email)
-              ? `<@${config.slack.users[x.email]}>`
-              : `${x.owner} ${x.email}`
-          })`
+          if (!prevListIds.includes(x.id)) {
+            let reviewerList = this.getCodeReviewers(x.id)
+            let reviewers = []
+            reviewerList.forEach((rev) => {
+              reviewers.push(`${rev.name} <@${config.slack.users[rev.email]}>`)
+            })
+            deltaList.add.push(msg + ` *Reviewers*: ${reviewers.join(',')}`)
+          }
+        }
       )
 
-      debug(
-        `prev: timestamp: ${
-          this.log.previous.timestamp
-        }; prevList: ${prevList.join(',')}`
-      )
-      debug(
-        `now: timestamp: ${this.log.latest.timestamp}; nowList: ${nowList.join(
-          ','
-        )}`
-      )
+      // debug(
+      //   `prev: timestamp: ${
+      //     this.log.previous.timestamp
+      //   }; prevList: ${prevListMsgs.join(',')}`
+      // )
+      // debug(
+      //   `now: timestamp: ${this.log.latest.timestamp}; nowList: ${nowListMsgs.join(
+      //     ','
+      //   )}`
+      // )
 
-      prevList.forEach((id) => {
-        if (!nowList.includes(id)) {
-          deltaList.drop.push(id)
-          deltaList.count++
-        }
-      })
-      nowList.forEach((id) => {
-        if (!prevList.includes(id)) {
-          deltaList.add.push(id)
-          deltaList.count++
-        }
-      })
+      // prevListMsgs.forEach((id) => {
+      //   if (!nowListMsgs.includes(id)) {
+      //     deltaList.drop.push(id)
+      //     deltaList.count++
+      //   }
+      // })
+      // nowListMsgs.forEach((id) => {
+      //   if (!prevListMsgs.includes(id)) {
+      //     deltaList.add.push(id)
+      //     deltaList.count++
+      //   }
+      // })
       debug(`deltaList: `, deltaList)
 
       return deltaList
@@ -360,6 +388,31 @@ class Gerrit {
     }
     debug(`... returning `) // , urgentPatches)
     return urgentPatches
+  }
+
+  /**
+   * Get a list of reviewers for a specified patch from the latest Gerrit data
+   *
+   * @param {number} patchId Patch ID
+   * @returns {array} List of reviewers' names (excluding Jenkins)
+   */
+  getCodeReviewers(patchId) {
+    let reviewers = []
+    this.data['open'].forEach((patch) => {
+      if (patch._number == patchId) {
+        if (patch.labels['Code-Review'] && patch.labels['Code-Review'].all) {
+          patch.labels['Code-Review'].all.forEach((r) => {
+            if (r.name !== 'jenkins') {
+              reviewers.push({name: r.name, email: r.email, slackId: (config.has('slack') &&
+              config.slack.has('users') &&
+              Object.keys(config.slack.users).includes(r.email)) ? config.slack.users[r.email] : '', score: (r.value == '1' ? '+1' : r.value)})
+            }
+          })
+        }
+        return(reviewers)
+      }
+    })
+    return(reviewers)
   }
 
   /**

@@ -36,7 +36,6 @@ if (slackConfigured) {
       debug(`done with `, x)
       let result = gLib.delta()
 
-      // gLib.delta().then(async (result) => {
       let d = new Date().toLocaleString('en', { timeZoneName: 'short' })
       debug(`${d} delta result: `, result)
       if (result.count || reportEmpty) {
@@ -52,6 +51,10 @@ if (slackConfigured) {
               ? `\n:checkered_flag: Dropped: ${result.drop.join(',')}`
               : ''
           }`
+
+          // Any new failing V scores?
+          // If so, send a msg with the owner's Slack ID
+
         }
         let headerBlock = {
           type: 'section',
@@ -60,6 +63,17 @@ if (slackConfigured) {
             text: `*Urgent Patch Delta Report* @ ${d}`,
           },
         }
+        let mergeBlock =
+          result.merge && result.merge.length
+            ? {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*Merged*\n${`:checkered_flag:` + result.merge.join('\n:checkered_flag:')}\n`,
+                },
+              }
+            : false
+
         let addBlock =
           result.add && result.add.length
             ? {
@@ -78,7 +92,7 @@ if (slackConfigured) {
                 text: {
                   type: 'mrkdwn',
                   text: `*Dropped*\n${
-                    `:checkered_flag:` + result.drop.join('\n:checkered_flag:')
+                    `:arrow_down:` + result.drop.join('\n:arrow_down:')
                   }\n`,
                 },
               }
@@ -106,6 +120,9 @@ if (slackConfigured) {
           debug(`No items added or dropped, so not sending Slack msg`)
         }
       }
+      // debug(`code reviewers for 1000: `, gLib.getCodeReviewers(1000))
+      // debug(`merged includes 1001? `, gLib.log.latest.merged.includes(1001))
+      // debug(`merged includes 1002? `, gLib.log.latest.merged.includes(1002))
     })
   })
 } else {
