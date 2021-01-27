@@ -9,7 +9,15 @@ const SPOTLIGHT_RECORDS = 100
 const NON_WIP_RECORDS = 200
 const WIP_RECORDS = 300
 
-const LOG_FILENAME = 'snapshot-log'
+const GERRIT_RECORD_COUNT_DEFAULT = 100
+
+const LOG_FILENAME =
+  config.has('monitor') &&
+  config.monitor.has('log') &&
+  config.monitor.log.has('filename')
+    ? config.monitor.log.filename
+    : 'snapshot-log'
+
 const EMPTY_LOG_TEMPLATE = { latest: {}, previous: {} }
 
 class Gerrit {
@@ -17,7 +25,7 @@ class Gerrit {
     this.data = {}
     this.parsed = false
     this.fetchDate = false
-    this.log = false
+    this.log = { latest: {} }
     this.latestTimestamp = false
     this.prevTimestamp = false
     this.newMergedPatches = false
@@ -55,10 +63,11 @@ class Gerrit {
   updateLogFile(newLatest) {
     debug(`updateLogFile(${newLatest}) called`)
     // Save latest
-    if (!this.log) {
-      debug(`... setting this.log to EMPTY_LOG_TEMPLATE`)
-      this.log = EMPTY_LOG_TEMPLATE
-    }
+    // if (!Object.keys(this.data).includes('open')) {
+    //   debug(`... setting this.log to EMPTY_LOG_TEMPLATE`)
+    //   this.log = EMPTY_LOG_TEMPLATE
+    // }
+    this.readLogFile()
 
     // Calc merged patch delta
     this.newMergedPatches = []
@@ -69,10 +78,10 @@ class Gerrit {
     }
     debug(`... newMergedPatches: `, this.newMergedPatches)
 
-    debug(`... setting this.log.previous to ${this.log.latest}`)
-    if (this.log.latest && Object.keys(this.log.latest).includes('timestamp')) {
-      this.log.previous = this.log.latest
-    }
+    // debug(`... setting this.log.previous to `, this.log.latest)
+    // if (this.log.latest && Object.keys(this.log.latest).includes('timestamp')) {
+    this.log.previous = this.log.latest
+    // }
 
     this.log.latest = {
       timestamp: newLatest,
@@ -83,16 +92,24 @@ class Gerrit {
     this.log.latest.urgentPatches = this._getUrgentPatches(this.data['open'])
 
     let logContent = JSON.stringify(this.log)
+    let logfilename =
+      config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt
+    let logfilenameCurrent =
+      config.dataDir +
+      path.sep +
+      LOG_FILENAME +
+      '-' +
+      newLatest +
+      config.dataFileExt
 
-    fs.writeFileSync(
-      config.dataDir + path.sep + LOG_FILENAME + config.dataFileExt,
-      logContent
+    debug(
+      `About to write to the log files: ${this.log.latest.timestamp} timestamp`
     )
 
-    fs.writeFileSync(
-      config.dataDir + path.sep + LOG_FILENAME + '-' + newLatest + config.dataFileExt,
-      logContent
-    )
+    fs.writeFileSync(logfilename, logContent)
+    fs.writeFileSync(logfilenameCurrent, logContent)
+
+    debug(`...done writing to both files`)
     return this.log.latest
   }
 
@@ -102,7 +119,7 @@ class Gerrit {
       fs.readFileSync(
         config.dataDir +
           path.sep +
-          'snapshot-' +
+          LOG_FILENAME + '-' +
           status +
           '-' +
           this.latestTimestamp +
@@ -117,7 +134,7 @@ class Gerrit {
       fs.readFileSync(
         config.dataDir +
           path.sep +
-          'snapshot-merged-' +
+          LOG_FILENAME + '-merged-' +
           timestamp +
           config.dataFileExt
       )
@@ -135,7 +152,7 @@ class Gerrit {
         fs.readFileSync(
           config.dataDir +
             path.sep +
-            'snapshot-' +
+            LOG_FILENAME + '-' +
             status +
             '-' +
             this.log.previous +
@@ -148,53 +165,54 @@ class Gerrit {
   }
 
   async fetchGerritData(status = 'open') {
-    debug(`fetch(${status}) called...`)
     return new Promise(async (resolve, reject) => {
+      debug(`fetch(${status}) called...`)
       // First, pull it...
-      const response = await fetch(
-        config.gerritUrlBase +
-          config.gerritUrlPrefix +
-          status +
-          config.gerritUrlSuffix
-      )
-      let raw = await response.text()
+      try {
+        let response = await fetch(
+          config.gerritUrlBase +
+            config.gerritUrlPrefix +
+            status +
+            config.gerritUrlSuffix +
+            (config.monitor && config.monitor.gerritRecordCount && typeof config.monitor.gerritRecordCount == 'number' ? `&n=${config.monitor.gerritRecordCount}` : `&n=${GERRIT_RECORD_COUNT_DEFAULT}`)
+        )
+        let raw = await response.text()
 
-      debug(`...raw set`)
-      // Then clean it...
-      if (raw.split(/\r?\n/)[0] == ")]}'") {
-        let orig = raw.split(/\r?\n/)
-        orig.shift()
-        raw = orig.join('')
+        debug(`...raw set [${status}]`)
+        // Then clean it...
+        if (raw.split(/\r?\n/)[0] == ")]}'") {
+          let orig = raw.split(/\r?\n/)
+          orig.shift()
+          raw = orig.join('')
+        }
+        debug(`...raw cleaned [${status}]`)
+
+        // Now store it...
+        // - To variables
+        this.data[status] = JSON.parse(raw)
+        this.fetchDate = this.now
+        this.latestTimestamp = this.now
+        debug(
+          `...data/fetchDate/latestTimestamp set [${status}]: ${this.fetchDate}/${this.latestTimestamp}`
+        )
+
+        // - To cache file
+        debug(`writing to data file [${status}]: `, this.data[status].length)
+        fs.writeFileSync(
+          config.dataDir +
+            path.sep +
+            LOG_FILENAME + '-' +
+            status +
+            '-' +
+            this.now +
+            config.dataFileExt,
+          JSON.stringify(this.data[status])
+        )
+        debug(`returning from fetchGerritData [${status}]`)
+        resolve(this.data[status])
+      } catch (err) {
+        reject(err)
       }
-      debug(`...raw cleaned`)
-
-      // Now store it...
-      // - To variables
-      this.data[status] = JSON.parse(raw)
-      this.fetchDate = this.now
-      this.latestTimestamp = this.now
-      debug(
-        `...data/fetchDate/latestTimestamp set: ${this.fetchDate}/${this.latestTimestamp}`
-      )
-
-      if (!fs.existsSync(config.dataDir)) {
-        debug(`Creating data directory: ${config.dataDir}`)
-        fs.mkdirSync(config.dataDir)
-      }
-
-      // - To cache file
-      debug(`f&l: writing to data file: `, this.data[status].length)
-      fs.writeFileSync(
-        config.dataDir +
-          path.sep +
-          'snapshot-' +
-          status +
-          '-' +
-          this.now +
-          config.dataFileExt,
-        JSON.stringify(this.data[status])
-      )
-      resolve(this.data[status])
     })
   }
 
@@ -202,26 +220,36 @@ class Gerrit {
     debug(`fetchAndLog() called...`)
     this.now = Date.now()
     return new Promise(async (resolve, reject) => {
+      if (!fs.existsSync(config.dataDir)) {
+        debug(`Creating data directory [${status}]: ${config.dataDir}`)
+        fs.mkdirSync(config.dataDir)
+      }
+
       Promise.all([
         this.fetchGerritData('open'),
         this.fetchGerritData('merged'),
-      ]).then((values) => {
+      ]).then((results) => {
+        let openData = results[0]
+        let mergedData = results[1]
         debug(
-          `...results of Promise.all: ${values[0].length} open and ${values[1].length} merged records`
+          `...results of Promise.all: ${openData.length} open and ${mergedData.length} merged records`
         )
-        if ((this.log = this.readLogFile())) {
-          // Update the log
-          debug(
-            `f&l: before updateLogFile call: this.log.previous.length = `,
-            this.log.previous.length
-          )
-          let result = this.updateLogFile(this.now)
-          debug(`f&l: after updateLogFile(${this.now})`)
-          resolve(this.data['open'].length > 0)
-        } else {
-          console.error(`Failed to read the log file`)
-          reject(`Unable to read log file`)
-        }
+        let logfileContents = this.updateLogFile(this.now)
+        debug(`f&l: after updateLogFile(${this.now})`)
+        debug(
+          `f&l: logfileContents:\n\ttimestamp: ${logfileContents.timestamp};\n\tmerged.length: ${logfileContents.merged.length};\n\tnewMergedPatches: `,
+          logfileContents.newMergedPatches
+        )
+        debug(
+          `f&l: returning // open: ${this.data['open'].length > 0}; merged: ${
+            this.data['merged'].length > 0
+          }`
+        )
+
+        resolve({
+          open: this.data['open'].length,
+          merged: this.data['merged'].length,
+        })
       })
     })
   }
@@ -233,6 +261,7 @@ class Gerrit {
      * the current entry (i.e. this.log.processed.length-1)
      * and one or more prior entries
      */
+    // debug(`this.log: `, this.log)
     if (Object.keys(this.log.previous).includes('urgentPatches')) {
       // Have processed prior data
 
@@ -299,15 +328,14 @@ class Gerrit {
   }
 
   async getUrgentPatches() {
-    // return new Promise(async (resolve, reject) => {
-    // const data = this.data ? this.data : await this.fetchAndLog()
     debug(`getUrgentPatches() this.data.length: `, this.data.length)
     return this._getUrgentPatches(this.data)
-    // })
   }
 
   _getUrgentPatches(data) {
-    debug(`_getUrgentPatches() called: ${data ? data.length : 'undef'}`)
+    debug(
+      `_getUrgentPatches() called: ${data ? data.length : 'undef'} total items`
+    )
     const urgentPatches = []
     if (data) {
       data.forEach((d) => {
@@ -322,6 +350,7 @@ class Gerrit {
         }
       })
     }
+    debug(`... returning `) // , urgentPatches)
     return urgentPatches
   }
 
