@@ -300,6 +300,7 @@ class Gerrit {
               : `${x.owner} ${x.email}`
             })`
           if (!nowListIds.includes(x.id)) {
+            deltaList.count++
             // Merged?
             if (this.log.latest.merged.includes(x.id)) {
               deltaList.merge.push(msg)
@@ -326,6 +327,7 @@ class Gerrit {
               reviewers.push(`${rev.name} <@${config.slack.users[rev.email]}>`)
             })
             deltaList.add.push(msg + ` *Reviewers*: ${reviewers.join(',')}`)
+            deltaList.count++
           }
         }
       )

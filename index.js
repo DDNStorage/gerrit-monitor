@@ -98,17 +98,18 @@ if (slackConfigured) {
               }
             : false
 
-        if (addBlock || dropBlock || reportEmpty) {
+        if (addBlock || dropBlock || mergeBlock || reportEmpty) {
           blocks = [headerBlock]
-          if (addBlock || dropBlock) {
+          if (addBlock || dropBlock || mergeBlock) {
             if (addBlock) blocks.push(addBlock)
             if (dropBlock) blocks.push(dropBlock)
+            if (mergeBlock) blocks.push(mergeBlock)
           } else {
             blocks.push({
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `Nothing added or dropped\n(Sending empty notification per reportEmpty config value)`,
+                text: `Nothing added, dropped, or merged\n(Sending empty notification per reportEmpty config value)`,
               },
             })
           }
