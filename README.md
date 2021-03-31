@@ -30,6 +30,8 @@ If you want to send Slack messages, create a custom webhook and save it under *s
 ## Optional
 
 - *cron.frequency*: Number of seconds between updates; Default: 30
+- *gerritConfig.username*: Authentication option - username
+- *gerritConfig.password*: Authentication option - password
 - *monitor.gerritRecordCount*: Number of Gerrit records to fetch (max); Default: 100
 - *monitor.log.filename*: Base filename (appended by Gerrit status name and timestamp); Default: 'snapshot-log'
 - *saveHistory*: Should previous records be archived? Default: true

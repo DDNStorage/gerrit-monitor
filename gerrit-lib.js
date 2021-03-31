@@ -1,6 +1,8 @@
 const path = require('path')
 
 const fetch = require('node-fetch')
+const { Headers } = require('node-fetch')
+
 const debug = require('debug')('gerrit-lib')
 const fs = require('fs')
 const config = require('config')
@@ -172,8 +174,20 @@ class Gerrit {
       debug(`fetch(${status}) called...`)
       // First, pull it...
       try {
-        let response = await fetch(
-          config.gerritUrlBase +
+        let authRequired = config.has("gerritConfig")
+          && config.gerritConfig.has("username")
+          && config.gerritConfig.has("password")
+
+        let url = config.gerritUrlBase
+
+        let headers = new Headers()
+
+        if (authRequired) {
+          url += '/a'
+          headers.set('Authorization', 'Basic ' + Buffer.from(config.gerritConfig.username + ":" + config.gerritConfig.password).toString('base64'));
+        }
+
+        url +=
             config.gerritUrlPrefix +
             status +
             config.gerritUrlSuffix +
@@ -182,7 +196,8 @@ class Gerrit {
             typeof config.monitor.gerritRecordCount == 'number'
               ? `&n=${config.monitor.gerritRecordCount}`
               : `&n=${GERRIT_RECORD_COUNT_DEFAULT}`)
-        )
+
+        let response = await fetch(url, { method: 'GET', headers: headers })
         let raw = await response.text()
 
         debug(`...raw set [${status}]`)
