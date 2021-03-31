@@ -1,12 +1,21 @@
 # gerrit-monitor
-Queries Gerrit for patch changes and (optionally) sends Slack alerts
 
-# Requirements
+# What it does
+Queries Gerrit for patch changes and (optionally) sends Slack alerts.
+
+# How it works
+1. On a regular schedule, pulls a list of the latest patches in Gerrit (parameters are set in the config file; see below for the available options)
+   1. Specific Gerrit flags/filters can be applied, including hashtags (spotlight.flags.hashtag in the config file), to limit the number of items covered in the delta report.
+1. Calculates the delta from the prior report
+1. If there are differences, reports on the delta.
+   1. If enabled, a Slack message is sent with summary data (patch owner, status, and, if open, reviewers)
+
+# Optional
 ## Slack
 If you want to send Slack messages, create a custom webhook and save it under *slack.webhookUrl* (See below for details).
 
-### Setup
-1. Create a new webhook at https://api.slack.com/apps/new
+### Slack setup
+1. Create a new webhook at https://api.slack.com/apps/new (Optional)
 2. Update the config file with the slack.webhookUrl value
 
 # Config file parameters
