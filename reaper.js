@@ -17,6 +17,7 @@ const { program } = require('commander')
 program
   .option('-d, --dry-run', 'Dry run (i.e. do not delete any files)')
   .option('-r, --run', 'Real run (i.e. do delete any files)')
+  .option('--dir <folder>', 'Data Directory')
   .option(
     '-s, --status <value>',
     'Additional status to watch (default: [open, merged])'
@@ -29,14 +30,19 @@ program.parse(process.argv)
 
 const options = program.opts()
 
-let dryRun = options.debug
+let dryRun = options.dryRun
   ? true
   : config.has('reaper') && config.reaper.has('dryRun')
   ? config.reaper.dryRun
   : false
 
 if (options.run) {
-  dryRun = false
+  if (options.dryRun) {
+    console.error(`Cannot specify dry-run and run at the same time.`)
+    process.exit(101)
+  } else {
+    dryRun = false
+  }
 }
 
 const statusList = ['open', 'merged']
@@ -57,17 +63,33 @@ if (options.exclude) {
   excludeFiles.push(options.exclude)
 }
 
+let dataDir = false
+if (options.dir) {
+  debug(`options.dir: ${options.dir}`)
+  dataDir = options.dir
+} else {
+  dataDir = config.dataDir
+}
+
+if (!dataDir) {
+  console.error(`No data directory specified.`)
+  process.exit(-102)
+} else if (!fs.existsSync(dataDir)) {
+  console.error(`Data Directory ${dataDir} not found.`)
+  process.exit(-103)
+}
+
 debug(`Config/Options:
 - dryRun: ${dryRun}
-- data dir: ${config.dataDir}
+- data dir: ${dataDir}
 - statusList: ${statusList.join(',')}
 - exclude: ${excludeFiles.join(',')}
 - verbose: ${debug.enabled}
 `)
 
 // 1. Get the list of files to exclude
-debug(`chdir(${config.dataDir})...`)
-process.chdir(config.dataDir)
+debug(`chdir(${dataDir})...`)
+process.chdir(dataDir)
 let log = JSON.parse(
   fs.readFileSync(config.monitor.log.filename + config.dataFileExt)
 )
