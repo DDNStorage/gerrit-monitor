@@ -18,6 +18,11 @@ If you want to send Slack messages, create a custom webhook and save it under *s
 1. Create a new webhook at https://api.slack.com/apps/new (Optional)
 2. Update the config file with the slack.webhookUrl value
 
+## File Notification
+Export details to a TSV file.
+
+Note: using both Slack and File notification at the same time is not currently supported.
+
 # Config file parameters
 ## Required
 
@@ -36,3 +41,17 @@ If you want to send Slack messages, create a custom webhook and save it under *s
 - *monitor.log.filename*: Base filename (appended by Gerrit status name and timestamp); Default: 'snapshot-log'
 - *saveHistory*: Should previous records be archived? Default: true
 - *slack.webhookUrl*: Webhook from Slack (required if you want to send Slack messages)
+- *spotlight*
+   - *enabled*: Are notifications enabled?
+   - *flags*: Filter for when to send notifications
+      - *hashtag*: Filter for specific hashtag value. Set to `false` to ignore/disable
+   - *patches*: Array of patches to monitor
+   - *notifications*: How to send notifications
+      - *slack*: Send notifications as Slack messages
+         - *enabled*: Turn on Slack notifications?
+         - *webhookUrl*: Full URL of Slack for messages
+      - *file*: Save data to TSV file
+         - *enabled*: Turn on file notifications?
+         - *outputFilename*: Base filename. Note: do not include an extension. Two files will be created:
+            - `-full.tsv`: Data from every check
+            - `-filtered.tsv`: Only data with at least one non-zero patch count (either "Add", "Drop", or "Merge")
