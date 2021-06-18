@@ -316,117 +316,123 @@ class Gerrit {
       config.spotlight.has('enabled') &&
       config.spotlight.enabled &&
       config.spotlight.has('notifications') &&
-      config.spotlight.notifications.has('slack') &&
+      config.spotlight.notifications.has('file') &&
       config.spotlight.notifications.file.has('enabled') &&
-      config.spotlight.notifications.file.enabled
+      config.spotlight.notifications.file.enabled &&
       config.spotlight.notifications.file.has('outputFilename')
         ? config.spotlight.notifications.file.outputFilename
         : false
 
-    if (spotlightUrgent) {
-      if (Object.keys(this.log.previous).includes('urgentPatches')) {
-        deltaList.type = "Urgent"
+    // Ensure that at least one notification method is enabled
+    if (slackNotification || fileNotification) {
+      debug(`Notification: Slack? ${slackNotification}; File? ${fileNotification}`)
+      if (spotlightUrgent) {
+        if (Object.keys(this.log.previous).includes('urgentPatches')) {
+          deltaList.type = "Urgent"
 
-        // Have processed prior data
+          // Have processed prior data
 
-        // Compare
-        let nowUrgent = this.log.latest.urgentPatches
-        let prevUrgent = this.log.previous.urgentPatches
+          // Compare
+          let nowUrgent = this.log.latest.urgentPatches
+          let prevUrgent = this.log.previous.urgentPatches
 
-        // debug(`...prevUrgent items: `, prevUrgent)
-        // debug(`...nowUrgent items: `, nowUrgent)
+          // debug(`...prevUrgent items: `, prevUrgent)
+          // debug(`...nowUrgent items: `, nowUrgent)
 
-        let prevListIds = prevUrgent.map((x) => x.id)
-        let nowListIds = nowUrgent.map((x) => x.id)
-        debug(`prevListIds: `, prevListIds, `; nowListIds: `, nowListIds)
+          let prevListIds = prevUrgent.map((x) => x.id)
+          let nowListIds = nowUrgent.map((x) => x.id)
+          debug(`prevListIds: `, prevListIds, `; nowListIds: `, nowListIds)
 
-        let prevListMsgs = []
-        let msg = ""
+          let prevListMsgs = []
+          let msg = ""
 
-        prevUrgent.forEach(
-          (x) => {
-            if (slackNotification) {
-              msg = `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
-                config.has('slack') &&
-                config.slack.has('users') &&
-                Object.keys(config.slack.users).includes(x.email)
-                  ? `<@${config.slack.users[x.email]}>`
-                  : `${x.owner} ${x.email}`
+          prevUrgent.forEach(
+            (x) => {
+              if (slackNotification) {
+                msg = `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
+                  config.has('slack') &&
+                  config.slack.has('users') &&
+                  Object.keys(config.slack.users).includes(x.email)
+                    ? `<@${config.slack.users[x.email]}>`
+                    : `${x.owner} ${x.email}`
+                  })`
+                if (!nowListIds.includes(x.id)) {
+                  deltaList.count++
+                  // Merged?
+                  if (this.log.latest.merged.includes(x.id)) {
+                    deltaList.merge.push(msg)
+                  } else { // Otherwise, add to drop list
+                    deltaList.drop.push(msg)
+                  }
+                }
+              } else if (fileNotification) {
+                if (!nowListIds.includes(x.id)) {
+                  deltaList.count++
+                  if (this.log.latest.merged.includes(x.id)) {
+                    deltaList.merge.push([x.id, x.subject, x.owner].join('|'))
+                  } else {
+                    deltaList.drop.push([x.id, x.subject, x.owner].join('|'))
+                  }
+                }
+              } // slackNotification /// fileNotification
+            } // (x)
+          ) // prevUrgent
+
+          nowUrgent.forEach(
+            (x) => {
+              if (slackNotification) {
+                msg = `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
+                  config.has('slack') &&
+                  config.slack.has('users') &&
+                  Object.keys(config.slack.users).includes(x.email)
+                    ? `<@${config.slack.users[x.email]}>`
+                    : `${x.owner} ${x.email}`
                 })`
-              if (!nowListIds.includes(x.id)) {
-                deltaList.count++
-                // Merged?
-                if (this.log.latest.merged.includes(x.id)) {
-                  deltaList.merge.push(msg)
-                } else { // Otherwise, add to drop list
-                  deltaList.drop.push(msg)
+                if (!prevListIds.includes(x.id)) {
+                  let reviewerList = this.getCodeReviewers(x.id)
+                  let reviewers = []
+                  reviewerList.forEach((rev) => {
+                    reviewers.push(`${rev.name} <@${config.slack.users[rev.email]}>`)
+                  })
+                  deltaList.add.push(msg + ` *Reviewers*: ${reviewers.join(', ')}`)
+                  deltaList.count++
                 }
-              }
-            } else if (fileNotification) {
-              if (!nowListIds.includes(x.id)) {
-                deltaList.count++
-                if (this.log.latest.merged.includes(x.id)) {
-                  deltaList.merge.push([x.id, x.subject, x.owner].join('|'))
-                } else {
-                  deltaList.drop.push([x.id, x.subject, x.owner].join('|'))
+              } else if (fileNotification) {
+                if (!prevListIds.includes(x.id)) {
+                  // let reviewerList = this.getCodeReviewers(x.id)
+                  // let reviewers = []
+                  // reviewerList.forEach((rev) => {
+                  //   reviewers.push(rev.name)
+                  // })
+                  deltaList.add.push([x.id, x.subject, x.owner].join('|'))
+                  deltaList.count++
                 }
-              }
-            } // slackNotification /// fileNotification
-          } // (x)
-        ) // prevUrgent
+              } // slackNotification /// fileNotification
+            } // (x)
+          ) // nowUrgent
 
-        nowUrgent.forEach(
-          (x) => {
-            if (slackNotification) {
-              msg = `<${config.gerritUrlBase}/${x.id}|${x.id}>: ${x.subject} (${
-                config.has('slack') &&
-                config.slack.has('users') &&
-                Object.keys(config.slack.users).includes(x.email)
-                  ? `<@${config.slack.users[x.email]}>`
-                  : `${x.owner} ${x.email}`
-              })`
-              if (!prevListIds.includes(x.id)) {
-                let reviewerList = this.getCodeReviewers(x.id)
-                let reviewers = []
-                reviewerList.forEach((rev) => {
-                  reviewers.push(`${rev.name} <@${config.slack.users[rev.email]}>`)
-                })
-                deltaList.add.push(msg + ` *Reviewers*: ${reviewers.join(',')}`)
-                deltaList.count++
-              }
-            } else if (fileNotification) {
-              if (!prevListIds.includes(x.id)) {
-                // let reviewerList = this.getCodeReviewers(x.id)
-                // let reviewers = []
-                // reviewerList.forEach((rev) => {
-                //   reviewers.push(rev.name)
-                // })
-                deltaList.add.push([x.id, x.subject, x.owner].join('|'))
-                deltaList.count++
-              }
-            } // slackNotification /// fileNotification
-          } // (x)
-        ) // nowUrgent
+          debug(`deltaList: `, deltaList)
 
-        debug(`deltaList: `, deltaList)
-
-        return deltaList
-      } else {
-        // Not enough data points
-        debug(`Need at least two data points to compare. Returning empty list.`)
-        return []
-      } // this.log.previous includes urgentPatches
-    } else { // urgent not highlighted, so delta everything
-      deltaList.type = "Full"
-      if (Object.keys(this.log.previous)) {
-        deltaList.merge = this.log.latest.newMergedPatches.slice()
-        deltaList.count = deltaList.merge.length
-        return deltaList
-      } else { // Not enough data points
-        debug(`Need at least two data points to compare. Returning empty list.`)
-        return []
-      } // this.log.previous
-    } // spotlightUrgent
+          return deltaList
+        } else {
+          // Not enough data points
+          debug(`Need at least two data points to compare. Returning empty list.`)
+          return []
+        } // this.log.previous includes urgentPatches
+      } else { // urgent not highlighted, so delta everything
+        deltaList.type = "Full"
+        if (Object.keys(this.log.previous)) {
+          deltaList.merge = this.log.latest.newMergedPatches.slice()
+          deltaList.count = deltaList.merge.length
+          return deltaList
+        } else { // Not enough data points
+          debug(`Need at least two data points to compare. Returning empty list.`)
+          return []
+        } // this.log.previous
+      } // spotlightUrgent
+    } else {
+      throw new Error(`No notification mode is set, so bailing out...`)
+    }
   }
 
   async getUrgentPatches() {
